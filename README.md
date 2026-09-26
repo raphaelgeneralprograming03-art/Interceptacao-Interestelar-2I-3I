@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -33,12 +33,14 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+            text-align: center;
         }
 
         p.subtitle {
             margin: 0 0 20px 0;
             color: #8a8ab0;
             font-size: 14px;
+            text-align: center;
         }
 
         .container {
@@ -60,6 +62,7 @@
             align-items: center;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             width: 540px;
+            box-sizing: border-box;
         }
 
         h2 {
@@ -86,7 +89,7 @@
             width: 100%;
             font-family: 'Courier New', Courier, monospace;
             font-size: 12px;
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.6);
             padding: 10px;
             border-radius: 4px;
             box-sizing: border-box;
@@ -134,10 +137,11 @@
             <h2 class="borisov-title">Simulação 1: Interceptação 2I/Borisov</h2>
             <canvas id="canvasBorisov" width="500" height="400"></canvas>
             <div class="telemetry" id="telBorisov">
-                <div><span>Status da Missão:</span><span style="color:#ff00ff">Nave em Curso</span></div>
+                <div><span>Status da Missão:</span><span id="stBorisov" style="color:#ff00ff">Nave em Curso</span></div>
+                <div><span>Distância Relativa:</span><span id="distBorisov">0.00 UA</span></div>
                 <div><span>Excentricidade (e):</span><span>1.50</span></div>
                 <div><span>Periélio (q):</span><span>2.00 UA</span></div>
-                <div><span>Velocidade Inifinita (v_inf):</span><span>32.2 km/s</span></div>
+                <div><span>Velocidade Infinita (v_inf):</span><span>32.2 km/s</span></div>
             </div>
         </div>
 
@@ -146,7 +150,8 @@
             <h2 class="atlas-title">Simulação 2: Interceptação Relativística 3I/ATLAS</h2>
             <canvas id="canvasAtlas" width="500" height="400"></canvas>
             <div class="telemetry" id="telAtlas">
-                <div><span>Status da Missão:</span><span style="color:#ff00ff">Emparelhamento Vetorial</span></div>
+                <div><span>Status da Missão:</span><span id="stAtlas" style="color:#ff00ff">Emparelhamento Vetorial</span></div>
+                <div><span>Distância Relativa:</span><span id="distAtlas">0.00 UA</span></div>
                 <div><span>Excentricidade (e):</span><span>6.10</span></div>
                 <div><span>Periélio (q):</span><span>1.40 UA</span></div>
                 <div><span>Velocidade Infinita (v_inf):</span><span>58.0 km/s</span></div>
@@ -188,21 +193,20 @@
         // Estado das animações
         let passoGlobal = 0;
         const passosTotais = 600;
+        let animacaoId = null;
 
         // Função Matemática Principal: Equação de Kepler para Hipérboles
         function gerarPontosHiperbole(config) {
             const pontos = [];
             const limiteAssintotico = Math.acos(-1.0 / config.e);
-            // Margem de segurança para evitar assíntota infinita
-            const margem = 0.08; 
+            const margem = 0.08; // Margem de segurança para evitar assíntota infinita
             
             const nuMin = -limiteAssintotico + margem;
             const nuMax = limiteAssintotico - margem;
 
             for (let i = 0; i <= passosTotais; i++) {
                 const t = i / passosTotais;
-                // Anomalia verdadeira calculada linearmente no tempo simulado
-                const nu = nuMin + t * (nuMax - nuMin); 
+                const nu = nuMin + t * (nuMax - nuMin); // Anomalia verdadeira
                 
                 // Raio orbital (Equação cônica geral)
                 const r = config.q * (1.0 + config.e) / (1.0 + config.e * Math.cos(nu));
@@ -229,12 +233,20 @@
             const W = canvas.width;
             const H = canvas.height;
             
-            // Origem (Sol) centralizada no Canvas com leve deslocamento
-            const centerX = W / 2 - 30;
+            // Origem (Sol) centralizada no Canvas
+            const centerX = W / 2 - 20;
             const centerY = H / 2 + 20;
             const escala = config.escala;
 
             ctx.clearRect(0, 0, W, H);
+
+            // Converter coordenadas espaciais para pixels na tela
+            function paraPixel(x, y) {
+                return {
+                    x: centerX + x * escala,
+                    y: centerY - y * escala // Inverte eixo Y para padrão cartesiano
+                };
+            }
 
             // 1. Grade Espacial de Fundo (Grid de UA)
             ctx.strokeStyle = '#101025';
@@ -246,19 +258,30 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
             }
 
-            // Converter coordenadas espaciais para pixels na tela
-            function paraPixel(x, y) {
-                return {
-                    x: centerX + x * escala,
-                    y: centerY - y * escala // Inverte eixo Y para padrão matemático cartesiano
-                };
-            }
-
-            // 2. Renderizar Trajetória do Objeto Interestelar
+            // 2. Renderizar Órbita Terrestre (1 UA) e Sol (Origem)
+            const ptSol = paraPixel(0, 0);
+            
+            // Órbita da Terra
+            ctx.strokeStyle = 'rgba(0, 150, 255, 0.15)';
+            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.strokeStyle = config.corObjeto;
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 2]); // Linha pontilhada para órbita teórica
+            ctx.arc(ptSol.x, ptSol.y, 1.0 * escala, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Sol
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ffcc00';
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(ptSol.x, ptSol.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // 3. Renderizar Trajetória Teórica do Objeto Interestelar
+            ctx.beginPath();
+            ctx.strokeStyle = config.corObjeto + '55'; // Com transparência
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
             
             for (let i = 0; i < pontosOrbita.length; i++) {
                 const pt = paraPixel(pontosOrbita[i].x, pontosOrbita[i].y);
@@ -266,14 +289,152 @@
                 else ctx.lineTo(pt.x, pt.y);
             }
             ctx.stroke();
-            ctx.setLineDash([]); // Reseta estilo de linha
+            ctx.setLineDash([]);
 
-            // 3. Computar e Renderizar Vetor da Espaçonave
+            // 4. Computar Posições Atuais da Nave e do Objeto
             const idxAlvo = Math.floor(pontosOrbita.length * config.idxEncontro);
             const pontoAlvo = pontosOrbita[idxAlvo];
-            
-            ctx.beginPath();
-            ctx.strokeStyle = CONFIG.borisov.corObjeto === config.corObjeto ? '#ff00ff' : '#d100d1';
-            ctx.lineWidth = 2;
-            
+            const ptAlvoPixel = paraPixel(pontoAlvo.x, pontoAlvo.y);
             const ptNaveInicio = paraPixel(config.naveOrigemX, config.naveOrigemY);
+
+            // Trajetória planejada de interceptação da Nave
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.moveTo(ptNaveInicio.x, ptNaveInicio.y);
+            ctx.lineTo(ptAlvoPixel.x, ptAlvoPixel.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Objeto em movimento
+            const idxObjeto = Math.min(passoAtual, pontosOrbita.length - 1);
+            const ptObjetoAtual = pontosOrbita[idxObjeto];
+            const ptObjetoPixel = paraPixel(ptObjetoAtual.x, ptObjetoAtual.y);
+
+            // Cálculo da posição da nave
+            let ptNaveAtual;
+            let posNaveCoord = { x: 0, y: 0 };
+
+            if (passoAtual <= idxAlvo) {
+                const tNave = passoAtual / idxAlvo;
+                posNaveCoord.x = config.naveOrigemX + (pontoAlvo.x - config.naveOrigemX) * tNave;
+                posNaveCoord.y = config.naveOrigemY + (pontoAlvo.y - config.naveOrigemY) * tNave;
+                ptNaveAtual = paraPixel(posNaveCoord.x, posNaveCoord.y);
+            } else {
+                // Após o ponto de interceptação, a nave acompanha o objeto interestelar
+                posNaveCoord = ptObjetoAtual;
+                ptNaveAtual = ptObjetoPixel;
+            }
+
+            // Rastro percorrido pelo Objeto Interestelar
+            ctx.beginPath();
+            ctx.strokeStyle = config.corObjeto;
+            ctx.lineWidth = 2.5;
+            const inicioRastro = Math.max(0, idxObjeto - 50);
+            for (let i = inicioRastro; i <= idxObjeto; i++) {
+                const pt = paraPixel(pontosOrbita[i].x, pontosOrbita[i].y);
+                if (i === inicioRastro) ctx.moveTo(pt.x, pt.y);
+                else ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+
+            // Rastro percorrido pela Nave
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff00ff';
+            ctx.lineWidth = 2;
+            ctx.moveTo(ptNaveInicio.x, ptNaveInicio.y);
+            ctx.lineTo(ptNaveAtual.x, ptNaveAtual.y);
+            ctx.stroke();
+
+            // Indicador Visual do Ponto de Interceptação Planejado
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(ptAlvoPixel.x, ptAlvoPixel.y, 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Renderizar Objeto Interestelar
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = config.corObjeto;
+            ctx.fillStyle = config.corObjeto;
+            ctx.beginPath();
+            ctx.arc(ptObjetoPixel.x, ptObjetoPixel.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Renderizar Nave
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff00ff';
+            ctx.fillStyle = '#ff00ff';
+            ctx.beginPath();
+            ctx.arc(ptNaveAtual.x, ptNaveAtual.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Pulso visual ao realizar o encontro
+            if (passoAtual >= idxAlvo) {
+                const raioPulso = 10 + Math.sin(passoAtual * 0.2) * 4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(ptNaveAtual.x, ptNaveAtual.y, raioPulso, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Retornar a distância relativa calculada em UA
+            const dx = ptObjetoAtual.x - posNaveCoord.x;
+            const dy = ptObjetoAtual.y - posNaveCoord.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function atualizarTelemetria(distBorisov, distAtlas) {
+            const idxBorisovAlvo = Math.floor(passosTotais * CONFIG.borisov.idxEncontro);
+            const idxAtlasAlvo = Math.floor(passosTotais * CONFIG.atlas.idxEncontro);
+
+            // Borisov Telemetria
+            document.getElementById('distBorisov').innerText = distBorisov.toFixed(2) + ' UA';
+            const stB = document.getElementById('stBorisov');
+            if (passoGlobal >= idxBorisovAlvo) {
+                stB.innerText = "Interceptado / Acoplado";
+                stB.style.color = "#00ff66";
+            } else {
+                stB.innerText = "Nave em Curso";
+                stB.style.color = "#ff00ff";
+            }
+
+            // ATLAS Telemetria
+            document.getElementById('distAtlas').innerText = distAtlas.toFixed(2) + ' UA';
+            const stA = document.getElementById('stAtlas');
+            if (passoGlobal >= idxAtlasAlvo) {
+                stA.innerText = "Emparelhamento Concluído";
+                stA.style.color = "#39ff14";
+            } else {
+                stA.innerText = "Aceleração Vetorial";
+                stA.style.color = "#ff00ff";
+            }
+        }
+
+        function loopAnimacao() {
+            const distB = desenharCena('canvasBorisov', CONFIG.borisov, orbitaBorisov, passoGlobal);
+            const distA = desenharCena('canvasAtlas', CONFIG.atlas, orbitaAtlas, passoGlobal);
+
+            atualizarTelemetria(distB, distA);
+
+            if (passoGlobal < passosTotais) {
+                passoGlobal++;
+            } else {
+                passoGlobal = 0; // Loop contínuo da animação
+            }
+
+            animacaoId = requestAnimationFrame(loopAnimacao);
+        }
+
+        function reiniciarSimulacoes() {
+            passoGlobal = 0;
+        }
+
+        // Iniciar Simulação
+        loopAnimacao();
+    </script>
+</body>
+</html>
